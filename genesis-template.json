@@ -1,0 +1,144 @@
+{
+  "config": {
+    "chainId": {{chainId}},
+    "homesteadBlock": 0,
+    "eip150Block": 0,
+    "eip155Block": 0,
+    "eip158Block": 0,
+    "byzantiumBlock": 0,
+    "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "muirGlacierBlock": 0,
+    "ramanujanBlock": 0,
+    "nielsBlock": 0,
+    "mirrorSyncBlock":1,
+    "brunoBlock": 1,
+    "eulerBlock": 2,
+    "nanoBlock": 3,
+    "moranBlock": 3,
+    "gibbsBlock": 4,
+    "planckBlock": 5,
+    "lubanBlock": 6,
+    "platoBlock": 7,
+    "berlinBlock": 8,
+    "londonBlock": 8,
+    "hertzBlock": 8,
+    "hertzfixBlock": 8,
+    "shanghaiTime": 0,
+    "keplerTime": 0,
+    "feynmanTime": 0,
+    "feynmanFixTime": 0,
+    "cancunTime": 0,
+    "haberTime": 0,
+    "haberFixTime": 0,
+    "bohrTime": 0,
+    "pascalTime": 0,
+    "pragueTime": 0,
+    "lorentzTime": 0,
+    "maxwellTime": 0,
+    "fermiTime": 0,
+    "osakaTime": 0,
+    "mendelTime": 0,
+    "depositContractAddress": "0x0000000000000000000000000000000000000000",
+    "parlia": {},
+    "blobSchedule": {
+      "cancun": {
+        "target": 3,
+        "max": 6,
+        "baseFeeUpdateFraction": 3338477
+      },
+      "prague": {
+        "target": 3,
+        "max": 6,
+        "baseFeeUpdateFraction": 3338477
+      }
+    }
+  },
+  "nonce": "0x0",
+  "timestamp": "0x5e9da7ce",
+  "extraData": "{{extraData}}",
+  "gasLimit": "0x2625a00",
+  "difficulty": "0x1",
+  "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "coinbase": "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE",
+  "alloc": {
+    "0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE": {
+      "balance": "0x0"
+    },
+    "0x0000000000000000000000000000000000001000": {
+      "balance": "0x0",
+      "code": "{{validatorContract}}"
+    },
+    "0x0000000000000000000000000000000000001001": {
+      "balance": "0x0",
+      "code": "{{slashContract}}"
+    },
+    "0x0000000000000000000000000000000000001002": {
+      "balance": "0x0",
+      "code": "{{systemRewardContract}}"
+    },
+    "0x0000000000000000000000000000000000001003": {
+      "balance": "0x0",
+      "code": "{{tendermintLightClient}}"
+    },
+    "0x0000000000000000000000000000000000001004": {
+      "balance": "{{initLockedBNBOnTokenHub}}",
+      "code": "{{tokenHub}}"
+    },
+    "0x0000000000000000000000000000000000001005": {
+      "balance": "0x0",
+      "code": "{{relayerIncentivize}}"
+    },
+    "0x0000000000000000000000000000000000001006": {
+      "balance": "0x0",
+      "code": "{{relayerHub}}"
+    },
+    "0x0000000000000000000000000000000000001007": {
+      "balance": "0x0",
+      "code": "{{govHub}}"
+    },
+    "0x0000000000000000000000000000000000001008": {
+      "balance": "0x0",
+      "code": "{{tokenManager}}"
+    },
+    "0x0000000000000000000000000000000000002000": {
+      "balance": "0x0",
+      "code": "{{crossChain}}"
+    },
+    "0x0000000000000000000000000000000000002001": {
+      "balance": "0x0",
+      "code": "{{staking}}"
+    },
+    "0x0000000000000000000000000000000000002002": {
+      "balance": "0x0",
+      "code": "{{stakeHub}}"
+    },
+    "0x0000000000000000000000000000000000002003": {
+      "balance": "0x0",
+      "code": "{{stakeCredit}}"
+    },
+    "0x0000000000000000000000000000000000002004": {
+      "balance": "0x0",
+      "code": "{{governor}}"
+    },
+    "0x0000000000000000000000000000000000002005": {
+      "balance": "0x0",
+      "code": "{{govToken}}"
+    },
+      "0x0000000000000000000000000000000000002006": {
+      "balance": "0x0",
+      "code": "{{timelock}}"
+    },
+    "0x0000000000000000000000000000000000003000": {
+      "balance": "0x0",
+      "code": "{{tokenRecoverPortal}}"
+    }{% for v in initHolders %},
+    "{{ v.address.replace('0x', '') }}": {
+      "balance": "0x{{ v.balance }}"
+    }{% endfor %}
+  },
+  "number": "0x0",
+  "gasUsed": "0x0",
+  "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+}

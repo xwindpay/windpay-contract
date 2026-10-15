@@ -1,0 +1,18 @@
+node_modules/
+build/
+out/
+.idea/
+pids/
+logs/
+cache/
+broadcast/
+
+contracts/flattened/*.sol
+
+# foundry lib
+lib/forge-std/
+
+.env
+**/.bak
+.DS_Store
+*.pyc

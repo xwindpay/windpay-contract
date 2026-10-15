@@ -1,0 +1,9 @@
+const web3 = require('web3');
+const init_holders = [
+  {% for initHolder in initHolders %}{
+     address: '{{initHolder }}',
+     balance: BigInt('500000000000000000000000000').toString(16) // 500000000e18
+  },{% endfor %}
+];
+
+exports = module.exports = init_holders;

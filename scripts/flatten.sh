@@ -1,0 +1,11 @@
+forge flatten contracts/WindpayValidatorSet.sol -o contracts/flattened/WindpayValidatorSet.sol
+forge flatten contracts/GovHub.sol -o contracts/flattened/GovHub.sol
+forge flatten contracts/SlashIndicator.sol -o contracts/flattened/SlashIndicator.sol
+forge flatten contracts/SystemReward.sol -o contracts/flattened/SystemReward.sol
+forge flatten contracts/TokenHub.sol -o contracts/flattened/TokenHub.sol
+forge flatten contracts/StakeHub.sol -o contracts/flattened/StakeHub.sol
+forge flatten contracts/StakeCredit.sol -o contracts/flattened/StakeCredit.sol
+forge flatten contracts/WindpayGovernor.sol -o contracts/flattened/WindpayGovernor.sol
+forge flatten contracts/GovToken.sol -o contracts/flattened/GovToken.sol
+forge flatten contracts/WindpayTimelock.sol -o contracts/flattened/WindpayTimelock.sol
+forge flatten contracts/TokenRecoverPortal.sol -o contracts/flattened/TokenRecoverPortal.sol

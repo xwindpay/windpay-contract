@@ -1,0 +1,463 @@
+pragma solidity ^0.8.10;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+import "./utils/Deployer.sol";
+
+interface IStakeCredit {
+    function balanceOf(address account) external view returns (uint256);
+    function totalPooledWind() external view returns (uint256);
+    function totalSupply() external view returns (uint256);
+    function getPooledWindByShares(uint256 shares) external view returns (uint256);
+    function getSharesByPooledWind(uint256 windAmount) external view returns (uint256);
+}
+
+contract GovernorTest is Deployer {
+    using RLPEncode for *;
+
+    event ConsensusAddressEdited(address indexed operatorAddress, address indexed newAddress);
+    event CommissionRateEdited(address indexed operatorAddress, uint64 commissionRate);
+    event DescriptionEdited(address indexed operatorAddress);
+    event VoteAddressEdited(address indexed operatorAddress, bytes newVoteAddress);
+    event RewardDistributed(address indexed operatorAddress, uint256 reward);
+    event ValidatorSlashed(address indexed operatorAddress, uint256 jailUntil, uint256 slashAmount, uint8 slashType);
+    event ValidatorUnjailed(address indexed operatorAddress);
+    event Claimed(address indexed operatorAddress, address indexed delegator, uint256 windAmount);
+
+    receive() external payable { }
+
+    function setUp() public {
+        vm.mockCall(address(0x66), bytes(""), hex"01");
+    }
+
+    function testDelegateVote() public {
+        address delegator = _getNextUserAddress();
+        (address validator,, address credit,) = _createValidator(2000 ether);
+        vm.startPrank(delegator);
+
+        // success case
+        uint256 windAmount = 100 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+        uint256 shares = IStakeCredit(credit).balanceOf(delegator);
+        assertEq(shares, windAmount);
+
+        uint256 govWindBalance = govToken.balanceOf(delegator);
+        assertEq(govWindBalance, windAmount);
+
+        assertEq(govToken.getVotes(delegator), 0);
+        govToken.delegate(delegator);
+        assertEq(govToken.getVotes(delegator), govWindBalance);
+
+        address user2 = _getNextUserAddress();
+        govToken.delegate(user2);
+        assertEq(govToken.getVotes(delegator), 0);
+        assertEq(govToken.getVotes(user2), govWindBalance);
+
+        vm.stopPrank();
+    }
+
+    function testProposeErrorCase() public {
+        address delegator = _getNextUserAddress();
+        (address validator,, address credit,) = _createValidator(2000 ether);
+        vm.startPrank(delegator);
+        assert(governor.proposeStarted());
+        vm.deal(delegator, 20_000_000 ether);
+        uint256 windAmount = 10_000_000 ether - 2000 ether - 1 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+        uint256 shares = IStakeCredit(credit).balanceOf(delegator);
+        assertEq(shares, windAmount);
+
+        uint256 govWindBalance = govToken.balanceOf(delegator);
+        assertEq(govWindBalance, windAmount);
+
+        assertEq(govToken.getVotes(delegator), 0);
+        govToken.delegate(delegator);
+        assertEq(govToken.getVotes(delegator), govWindBalance);
+        console2.log("govWindBalance", govWindBalance);
+
+        // text Propose
+        address[] memory targets;
+        uint256[] memory values;
+        bytes[] memory calldatas;
+
+        vm.roll(block.number + 1);
+
+        // param proposal
+        targets = new address[](1);
+        targets[0] = GOV_HUB_ADDR;
+        values = new uint256[](1);
+        values[0] = 0;
+        calldatas = new bytes[](1);
+
+        uint256 newVotingDelay = 7;
+        calldatas[0] = abi.encodeWithSignature(
+            "updateParam(string,bytes,address)", "votingDelay", abi.encodePacked(newVotingDelay), GOVERNOR_ADDR
+        );
+
+        //        assertEq(governor.proposeStarted(), true, "propose should not start");
+
+        // mainnet totalSupply is already enough
+        // // govWIND totalSupply not enough
+        // string memory description = "test";
+        // vm.expectRevert();
+        // uint256 proposalId = governor.propose(targets, values, calldatas, description);
+        // assertEq(governor.proposeStarted(), false, "propose should not start");
+        //
+        // windAmount = 1 ether;
+        // stakeHub.delegate{ value: windAmount }(validator, false);
+        // proposalId = governor.propose(targets, values, calldatas, description);
+        // assertEq(governor.proposeStarted(), true, "propose should start");
+        //
+        // windAmount = 10000000 ether - 2000 ether;
+        // govWindBalance = govToken.balanceOf(delegator);
+        // console2.log("govWindBalance", govWindBalance);
+        // assertEq(govWindBalance, windAmount);
+        // assertEq(govToken.getVotes(delegator), govWindBalance);
+        // console2.log("voting power before undelegate", govToken.getVotes(delegator));
+
+        // voting power changed after undelegating staking share
+        windAmount = 1 ether;
+        stakeHub.undelegate(validator, windAmount);
+        console2.log("voting power after undelegate", govToken.getVotes(delegator));
+        assertEq(govToken.getVotes(delegator), govWindBalance - windAmount);
+    }
+
+    function testProposalNotApproved() public {
+        address delegator = _getNextUserAddress();
+        (address validator,,,) = _createValidator(2000 ether);
+        vm.startPrank(delegator);
+        assert(governor.proposeStarted());
+        vm.deal(delegator, 20_000_000 ether);
+        uint256 windAmount = 10_000_000 ether - 2000 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+
+        assertEq(govToken.getVotes(delegator), 0);
+        govToken.delegate(delegator);
+        assertEq(govToken.getVotes(delegator), windAmount);
+        console2.log("govToken.getVotes(delegator)", govToken.getVotes(delegator));
+
+        address delegator2 = _getNextUserAddress();
+        vm.startPrank(delegator2);
+        vm.deal(delegator2, 20_000_000 ether);
+        windAmount = 10_000_000 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+
+        assertEq(govToken.getVotes(delegator2), 0);
+        govToken.delegate(delegator2);
+        assertEq(govToken.getVotes(delegator2), windAmount);
+        console2.log("govToken.getVotes(delegator2)", govToken.getVotes(delegator2));
+        vm.stopPrank();
+
+        // text Propose
+        vm.startPrank(delegator);
+        address[] memory targets = new address[](1);
+        targets[0] = GOV_HUB_ADDR;
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory calldatas = new bytes[](1);
+        string memory description = "test";
+
+        vm.roll(block.number + 1);
+        uint256 proposalId = governor.propose(targets, values, calldatas, description);
+
+        uint256 _nowBlock = block.number;
+        uint256 _now = block.timestamp;
+        vm.roll(_nowBlock + 1);
+        vm.warp(_now + 3);
+        // support vote
+        governor.castVote(proposalId, 1);
+        vm.stopPrank();
+
+        vm.startPrank(delegator2);
+        // against vote
+        governor.castVote(proposalId, 0);
+        vm.stopPrank();
+
+        uint256 deadline = governor.proposalDeadline(proposalId);
+        vm.roll(deadline + 1);
+
+        // against > support
+        vm.expectRevert("Governor: proposal not successful");
+        governor.queue(proposalId);
+    }
+
+    function testProposalQuorumNotReached() public {
+        address delegator = _getNextUserAddress();
+        (address validator,,,) = _createValidator(2000 ether);
+        vm.startPrank(delegator);
+        assert(governor.proposeStarted());
+        vm.deal(delegator, 20_000_000 ether);
+        uint256 windAmount = 10_000_000 ether - 2000 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+
+        assertEq(govToken.getVotes(delegator), 0);
+        govToken.delegate(delegator);
+        assertEq(govToken.getVotes(delegator), windAmount);
+        console2.log("govToken.getVotes(delegator)", govToken.getVotes(delegator));
+
+        address delegator2 = _getNextUserAddress();
+        vm.startPrank(delegator2);
+        vm.deal(delegator2, 20_000_000 ether);
+        windAmount = windAmount / 10;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+
+        assertEq(govToken.getVotes(delegator2), 0);
+        govToken.delegate(delegator2);
+        assertEq(govToken.getVotes(delegator2), windAmount);
+        console2.log("govToken.getVotes(delegator2)", govToken.getVotes(delegator2));
+        vm.stopPrank();
+
+        // text Propose
+        vm.startPrank(delegator);
+        address[] memory targets = new address[](1);
+        targets[0] = GOV_HUB_ADDR;
+        uint256[] memory values = new uint256[](1);
+        bytes[] memory calldatas = new bytes[](1);
+        string memory description = "test";
+
+        vm.roll(block.number + 1);
+        uint256 proposalId = governor.propose(targets, values, calldatas, description);
+
+        uint256 _nowBlock = block.number;
+        uint256 _now = block.timestamp;
+        vm.roll(_nowBlock + 1);
+        vm.warp(_now + 3);
+        vm.stopPrank();
+
+        vm.startPrank(delegator2);
+        // support vote, support quorum < 10%
+        governor.castVote(proposalId, 1);
+        vm.stopPrank();
+
+        uint256 deadline = governor.proposalDeadline(proposalId);
+        vm.roll(deadline + 1);
+
+        // quorum not reached
+        uint256 quorumVote = governor.quorumVotes();
+
+        (,,,,, uint256 forVotes, uint256 againstVotes,,,) = governor.proposals(proposalId);
+
+        console2.log("quorumVote", quorumVote);
+        console2.log("forVotes", forVotes);
+        console2.log("againstVotes", againstVotes);
+
+        assertEq(forVotes < quorumVote, true, "quorum not reached");
+
+        vm.expectRevert("Governor: proposal not successful");
+        governor.queue(proposalId);
+    }
+
+    function testProposeQuorumReached() public {
+        address delegator = _getNextUserAddress();
+        (address validator,, address credit,) = _createValidator(2000 ether);
+        vm.startPrank(delegator);
+        assert(governor.proposeStarted());
+
+        vm.deal(delegator, 20_000_000 ether);
+
+        uint256 windAmount = 10_000_000 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+        uint256 shares = IStakeCredit(credit).balanceOf(delegator);
+        assertEq(shares, windAmount);
+
+        uint256 govWindBalance = govToken.balanceOf(delegator);
+        assertEq(govWindBalance, windAmount);
+
+        assertEq(govToken.getVotes(delegator), 0);
+        govToken.delegate(delegator);
+        assertEq(govToken.getVotes(delegator), govWindBalance);
+
+        // text Propose
+        address[] memory targets;
+        uint256[] memory values;
+        bytes[] memory calldatas;
+        string memory description = "test";
+
+        vm.roll(block.number + 1);
+        console2.log("delegator", delegator);
+        console2.log("govToken.getVotes(delegator)", govToken.getVotes(delegator));
+
+        // param proposal
+        targets = new address[](1);
+        targets[0] = GOV_HUB_ADDR;
+        values = new uint256[](1);
+        values[0] = 0;
+        calldatas = new bytes[](1);
+
+        uint256 newVotingDelay = 7;
+        calldatas[0] = abi.encodeWithSignature(
+            "updateParam(string,bytes,address)", "votingDelay", abi.encodePacked(newVotingDelay), GOVERNOR_ADDR
+        );
+
+        uint256 proposalId = governor.propose(targets, values, calldatas, description);
+        assertEq(governor.proposeStarted(), true, "propose should start");
+
+        bytes32 descHash = keccak256(bytes(description));
+        console2.logBytes32(descHash);
+        assertEq(proposalId, governor.hashProposal(targets, values, calldatas, descHash), "hashProposal");
+
+        console2.log("proposalId", proposalId);
+        console2.log("proposalSnapshot", governor.proposalSnapshot(proposalId));
+        console2.log("now", governor.clock());
+
+        uint256 _nowBlock = block.number;
+        uint256 _now = block.timestamp;
+
+        // read the live governor params instead of recomputing from a fixed BLOCK_INTERVAL;
+        // mainnet retuned votingPeriod/lateQuorumVoteExtension for the ~0.45s block interval
+        uint256 BLOCK_INTERVAL = 3 seconds;
+        uint256 NEW_VOTING_PERIOD = governor.votingPeriod();
+        uint64 NEW_MIN_PERIOD_AFTER_QUORUM = governor.lateQuorumVoteExtension();
+        vm.roll(_nowBlock + NEW_VOTING_PERIOD - 1);
+        vm.warp(_now + (NEW_VOTING_PERIOD - 1) * BLOCK_INTERVAL / 2);
+
+        uint256 deadline = governor.proposalDeadline(proposalId);
+        console2.log("block.number", block.number);
+        console2.log("deadline block", deadline);
+        assertEq(deadline, block.number + 1);
+
+        governor.castVote(proposalId, 1);
+
+        deadline = governor.proposalDeadline(proposalId);
+        console2.log("block.number", block.number);
+        console2.log("deadline block", deadline);
+        // quorum reached, deadline should be added 1 day
+        assertEq(deadline, block.number + NEW_MIN_PERIOD_AFTER_QUORUM);
+    }
+
+    function testPropose() public {
+        address delegator = _getNextUserAddress();
+        (address validator,, address credit,) = _createValidator(2000 ether);
+        vm.startPrank(delegator);
+        assert(governor.proposeStarted());
+
+        vm.deal(delegator, 20_000_000 ether);
+
+        uint256 windAmount = 10_000_000 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+        uint256 shares = IStakeCredit(credit).balanceOf(delegator);
+        assertEq(shares, windAmount);
+
+        uint256 govWindBalance = govToken.balanceOf(delegator);
+        assertEq(govWindBalance, windAmount);
+
+        assertEq(govToken.getVotes(delegator), 0);
+        govToken.delegate(delegator);
+        assertEq(govToken.getVotes(delegator), govWindBalance);
+
+        // text Propose
+        address[] memory targets;
+        uint256[] memory values;
+        bytes[] memory calldatas;
+        string memory description = "test";
+
+        vm.roll(block.number + 1);
+        console2.log("delegator", delegator);
+        console2.log("govToken.getVotes(delegator)", govToken.getVotes(delegator));
+
+        // param proposal
+        targets = new address[](1);
+        targets[0] = GOV_HUB_ADDR;
+        values = new uint256[](1);
+        values[0] = 0;
+        calldatas = new bytes[](1);
+
+        uint256 newVotingDelay = 7;
+        calldatas[0] = abi.encodeWithSignature(
+            "updateParam(string,bytes,address)", "votingDelay", abi.encodePacked(newVotingDelay), GOVERNOR_ADDR
+        );
+
+        console2.log("calldatas[0]");
+        console2.logBytes(calldatas[0]);
+
+        uint256 proposalId = governor.propose(targets, values, calldatas, description);
+        assertEq(governor.proposeStarted(), true, "propose should start");
+
+        bytes32 descHash = keccak256(bytes(description));
+        console2.logBytes32(descHash);
+        assertEq(proposalId, governor.hashProposal(targets, values, calldatas, descHash), "hashProposal");
+
+        console2.log("proposalId", proposalId);
+        console2.log("proposalSnapshot", governor.proposalSnapshot(proposalId));
+        console2.log("now", governor.clock());
+
+        uint256 _nowBlock = block.number;
+        uint256 _now = block.timestamp;
+        vm.roll(_nowBlock + 10);
+        vm.warp(_now + 1 days);
+
+        governor.castVote(proposalId, 1);
+
+        vm.roll(_nowBlock + 100000000);
+        vm.warp(block.timestamp + 100 days);
+
+        governor.state(proposalId);
+
+        governor.queue(proposalId);
+
+        vm.warp(block.timestamp + 102 days);
+
+        governor.execute(proposalId);
+
+        vm.stopPrank();
+    }
+
+    function testUndelegate() public {
+        address delegator = _getNextUserAddress();
+        (address validator,, address credit,) = _createValidator(2000 ether);
+        vm.startPrank(delegator);
+
+        uint256 windAmount = 100 ether;
+        stakeHub.delegate{ value: windAmount }(validator, false);
+        uint256 shares = IStakeCredit(credit).balanceOf(delegator);
+
+        // failed with not enough shares
+        vm.expectRevert();
+        stakeHub.undelegate(validator, shares + 1);
+
+        // success case
+        stakeHub.undelegate(validator, shares / 2);
+
+        // claim failed
+        vm.expectRevert();
+        stakeHub.claim(validator, 0);
+
+        // claim success
+        vm.warp(block.timestamp + 7 days);
+        uint256 balanceBefore = delegator.balance;
+        vm.expectEmit(true, true, false, true, address(stakeHub));
+        emit Claimed(validator, delegator, windAmount / 2);
+        stakeHub.claim(validator, 0);
+        uint256 balanceAfter = delegator.balance;
+        assertEq(balanceAfter - balanceBefore, windAmount / 2);
+
+        vm.stopPrank();
+    }
+
+    function testUndelegateAll() public {
+        uint256 selfDelegation = 2000 ether;
+        uint256 toLock = stakeHub.LOCK_AMOUNT();
+        (address validator,, address credit,) = _createValidator(selfDelegation);
+        uint256 _totalShares = IStakeCredit(credit).totalSupply();
+        assertEq(_totalShares, selfDelegation + toLock, "wrong total shares");
+        uint256 _totalPooledWind = IStakeCredit(credit).totalPooledWind();
+        assertEq(_totalPooledWind, selfDelegation + toLock, "wrong total pooled WIND");
+
+        vm.startPrank(validator);
+
+        // 1. undelegate all
+        stakeHub.undelegate(validator, selfDelegation);
+        _totalShares = IStakeCredit(credit).totalSupply();
+        assertEq(_totalShares, toLock, "wrong total shares");
+        _totalPooledWind = IStakeCredit(credit).totalPooledWind();
+        assertEq(_totalPooledWind, toLock, "wrong total pooled WIND");
+
+        // 2. delegate again
+        stakeHub.delegate{ value: selfDelegation }(validator, false);
+        _totalShares = IStakeCredit(credit).totalSupply();
+        assertEq(_totalShares, selfDelegation + toLock, "wrong total shares");
+        _totalPooledWind = IStakeCredit(credit).totalPooledWind();
+        assertEq(_totalPooledWind, selfDelegation + toLock, "wrong total pooled WIND");
+
+        vm.stopPrank();
+    }
+}
