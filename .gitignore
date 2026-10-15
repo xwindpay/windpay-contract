@@ -1,11 +1,13 @@
+gitignore
 node_modules/
-build/
 out/
 .idea/
 pids/
 logs/
 cache/
 broadcast/
+.venv/
+__pycache__/
 
 contracts/flattened/*.sol
 
